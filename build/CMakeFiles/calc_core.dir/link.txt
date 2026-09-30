@@ -1,2 +1,0 @@
-/usr/bin/ar qc libcalc_core.a CMakeFiles/calc_core.dir/src/calc_engine.cpp.o CMakeFiles/calc_core.dir/src/calc_features.cpp.o
-/usr/bin/ranlib libcalc_core.a
