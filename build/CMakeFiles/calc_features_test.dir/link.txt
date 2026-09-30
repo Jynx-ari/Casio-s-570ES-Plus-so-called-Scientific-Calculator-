@@ -1,0 +1,1 @@
+/usr/bin/c++ -Wl,--dependency-file=CMakeFiles/calc_features_test.dir/link.d CMakeFiles/calc_features_test.dir/tests/calc_features_test.cpp.o -o calc_features_test  libcalc_core.a

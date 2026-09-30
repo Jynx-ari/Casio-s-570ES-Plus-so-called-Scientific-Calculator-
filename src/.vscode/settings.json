@@ -1,0 +1,10 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "cmake": true,
+        "ctest": true,
+        "/home/Jay/Downloads/casio_ui_sim/build/casio_ui_sim": true,
+        "magick": true,
+        "./build/calc_engine_test": true,
+        "printf": true
+    }
+}

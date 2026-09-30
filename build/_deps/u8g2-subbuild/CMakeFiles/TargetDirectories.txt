@@ -1,0 +1,3 @@
+/home/Jay/Downloads/casio_ui_sim/build/_deps/u8g2-subbuild/CMakeFiles/u8g2-populate.dir
+/home/Jay/Downloads/casio_ui_sim/build/_deps/u8g2-subbuild/CMakeFiles/edit_cache.dir
+/home/Jay/Downloads/casio_ui_sim/build/_deps/u8g2-subbuild/CMakeFiles/rebuild_cache.dir
