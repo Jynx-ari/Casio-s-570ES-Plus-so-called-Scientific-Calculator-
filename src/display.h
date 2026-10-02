@@ -1,6 +1,6 @@
 #pragma once
-// display.h -- thin C++ wrapper over REAL U8g2 (PROJECT.md section 14).
-// UI code talks to Display only. Firmware: same class, real ST7565 setup call.
+// display.h -- UI-facing drawing abstraction over U8g2.
+// The simulator uses a 320x240 virtual panel; firmware supplies the TFT backend.
 #include <string>
 #include "lcd_hal.h"
 

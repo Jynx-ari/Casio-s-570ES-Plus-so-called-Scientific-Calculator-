@@ -2,8 +2,8 @@
 
 Display::Display() {
     // Firmware equivalent:
-    //   u8g2_Setup_st7565_ea_dogm128_f(&u8g2_, U8G2_R0, <spi cb>, <gpio cb>);
-    u8g2_Setup_calcsim_128x64_f(&u8g2_, U8G2_R0);
+    //   u8g2_Setup_st7789_320x240_f(&u8g2_, U8G2_R0, <spi cb>, <gpio cb>);
+    u8g2_Setup_calcsim_320x240_f(&u8g2_, U8G2_R0);
     u8g2_InitDisplay(&u8g2_);
     u8g2_SetPowerSave(&u8g2_, 0);
     u8g2_SetFontPosBaseline(&u8g2_);

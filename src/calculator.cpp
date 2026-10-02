@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <limits>
 #include <numeric>
 #include <sstream>
 
@@ -16,6 +17,8 @@ const char *const DN_ROWS[3] = {"#####", ".###.", "..#.."};
 const char *const TL[5] = {"..#", ".##", "###", ".##", "..#"};
 const char *const TR[5] = {"#..", "##.", "###", "##.", "#.."};
 const std::string MUL = "\xC3\x97", DIV = "\xC3\xB7", PI = "\xCF\x80";
+constexpr int GRAPH_X = 20, GRAPH_Y = 60, GRAPH_W = 280, GRAPH_H = 144;
+constexpr int GRAPH_INSET = 3;
 
 std::string num(long long v) { return std::to_string(v); }
 
@@ -259,6 +262,7 @@ void Calculator::equals() {
 }
 
 void Calculator::press(Key k) {
+    if (scr_ == Screen::GraphEntry || scr_ == Screen::GraphPlot) { graphKey(k); return; }
     if (scr_ == Screen::ModeWork) { modeKey(k); return; }
     if (scr_ != Screen::Calc) { menuKey(k); return; }
     if (k == Key::Shift) { shift_ = !shift_; alpha_ = false; return; }
@@ -430,6 +434,107 @@ void Calculator::finishModeEntry() {
         }
     }
     modePage_ = 0;
+}
+
+bool Calculator::graphValueAt(double x, double &y) const {
+    calc::Memory memory{};
+    calc::MemoryValue &xValue = memory[static_cast<size_t>('X' - 'A')];
+    xValue.defined = true;
+    xValue.value = x;
+    calc::EvalContext context;
+    context.angle = set_.angle;
+    context.memory = &memory;
+    calc::EvalResult result = calc::evaluate(graphExpression_, context);
+    if (!result.ok || result.complex || !std::isfinite(result.value)) return false;
+    y = result.value;
+    return true;
+}
+
+void Calculator::rebuildGraphSamples() {
+    const int count = GRAPH_W - 2 * GRAPH_INSET;
+    graphSamples_.assign(static_cast<size_t>(count), std::numeric_limits<double>::quiet_NaN());
+    graphValidSamples_ = 0;
+    for (int i = 0; i < count; ++i) {
+        double x = graphXMin_ + (graphXMax_ - graphXMin_) * i / (count - 1);
+        double y = 0.0;
+        if (graphValueAt(x, y)) {
+            graphSamples_[static_cast<size_t>(i)] = y;
+            ++graphValidSamples_;
+        }
+    }
+    graphTrace_ = std::clamp(graphTrace_, 0, count - 1);
+}
+
+void Calculator::graphKey(Key k) {
+    if (k == Key::Ac) {
+        scr_ = Screen::Calc;
+        modeInd_.clear();
+        graphError_.clear();
+        ed_.reset();
+        phase_ = Phase::Edit;
+        shift_ = false;
+        return;
+    }
+    if (scr_ == Screen::GraphEntry) {
+        if (k == Key::Eq) {
+            graphExpression_ = ed_.engine();
+            int open = 0;
+            for (char c : graphExpression_) {
+                if (c == '(') ++open;
+                else if (c == ')') --open;
+            }
+            for (int i = 0; i < open; ++i) graphExpression_ += ')';
+            if (graphExpression_.empty()) { graphError_ = "Enter f(x) first"; return; }
+            rebuildGraphSamples();
+            if (graphValidSamples_ == 0) { graphError_ = "No plottable points"; return; }
+            graphError_.clear();
+            scr_ = Screen::GraphPlot;
+            return;
+        }
+        if (k == Key::Del) { ed_.del(); graphError_.clear(); return; }
+        if (k == Key::Left) { ed_.left(); graphError_.clear(); return; }
+        if (k == Key::Right) { ed_.right(); graphError_.clear(); return; }
+        if (k == Key::Up) { ed_.up(); return; }
+        if (k == Key::Down) { ed_.down(); return; }
+        if (k == Key::Shift) { shift_ = !shift_; return; }
+        if (k == Key::Alpha) { alpha_ = !alpha_; shift_ = false; return; }
+        if (k == Key::Hyp) { hyp_ = !hyp_; return; }
+        bool sh = shift_, al = alpha_, hyp = hyp_;
+        shift_ = alpha_ = hyp_ = false;
+        editKey(k, sh, al, hyp);
+        graphError_.clear();
+        return;
+    }
+
+    if (k == Key::Eq || k == Key::Del) { scr_ = Screen::GraphEntry; graphError_.clear(); return; }
+    if (k == Key::Shift) { shift_ = !shift_; return; }
+    if (k == Key::Left || k == Key::Right) {
+        int direction = k == Key::Right ? 1 : -1;
+        if (shift_) {
+            double offset = (graphXMax_ - graphXMin_) * 0.1 * direction;
+            graphXMin_ += offset;
+            graphXMax_ += offset;
+            rebuildGraphSamples();
+        } else graphTrace_ = std::clamp(graphTrace_ + direction, 0, static_cast<int>(graphSamples_.size()) - 1);
+        shift_ = false;
+        return;
+    }
+    if (k == Key::Up || k == Key::Down) {
+        double offset = (graphYMax_ - graphYMin_) * 0.1 * (k == Key::Up ? 1.0 : -1.0);
+        graphYMin_ += offset;
+        graphYMax_ += offset;
+        return;
+    }
+    if (k == Key::Plus || k == Key::Minus) {
+        double factor = k == Key::Plus ? 0.8 : 1.25;
+        double xCenter = (graphXMin_ + graphXMax_) / 2.0;
+        double yCenter = (graphYMin_ + graphYMax_) / 2.0;
+        double halfX = (graphXMax_ - graphXMin_) * factor / 2.0;
+        double halfY = (graphYMax_ - graphYMin_) * factor / 2.0;
+        graphXMin_ = xCenter - halfX; graphXMax_ = xCenter + halfX;
+        graphYMin_ = yCenter - halfY; graphYMax_ = yCenter + halfY;
+        rebuildGraphSamples();
+    }
 }
 
 void Calculator::modeKey(Key k) {
@@ -626,12 +731,13 @@ void Calculator::menuKey(Key k) {
     switch (scr_) {
         case Screen::Mode:
             if (k == Key::Down) return;
-            if (n >= 1 && n <= 8) {
+            if (n >= 1 && n <= 9) {
                 if (n == 1) { modeInd_.clear(); scr_ = Screen::Calc; }
                 else if (n == 4) { modeInd_ = "BASE"; scr_ = Screen::BaseNSel; }
                 else if (n == 3) { modeInd_ = "STAT"; scr_ = Screen::StatType; }
                 else if (n == 6) { modeInd_ = "MAT"; scr_ = Screen::MatrixOp; }
                 else if (n == 7) { modeInd_ = "TABLE"; scr_ = Screen::TableFn; }
+                else if (n == 9) { modeInd_ = "GRAPH"; scr_ = Screen::GraphEntry; }
                 else {
                     static const char *ind[] = {"", "", "CMPLX", "STAT", "", "EQN", "MAT", "", "VCT"};
                     modeInd_ = ind[n]; scr_ = Screen::ModeWork;
@@ -640,6 +746,12 @@ void Calculator::menuKey(Key k) {
                 modePage_ = 0; modeOperation_ = modeInd_ == "TABLE" ? 1 : -1;
                 modeHasResult_ = false;
                 if (modeInd_ == "STAT") modeStats_.clear();
+                if (modeInd_ == "GRAPH") {
+                    graphError_.clear();
+                    graphXMin_ = -10.0; graphXMax_ = 10.0;
+                    graphYMin_ = -5.0; graphYMax_ = 5.0;
+                    graphTrace_ = 0;
+                }
                 ed_.reset(); phase_ = Phase::Edit;
             }
             break;
@@ -745,53 +857,58 @@ void Calculator::menuKey(Key k) {
 // ------------------------------------------------------------------ drawing
 void Calculator::drawIndicators(Display &d) {
     using F = Display::Font;
-    const int by = 6;
-    if (shift_) d.text(1, by, "S", F::Tiny);
-    if (alpha_) d.text(6, by, "A", F::Tiny);
-    if (storePending_) d.text(11, by, "STO", F::Tiny);
-    if (hyp_) d.text(24, by, "HYP", F::Tiny);
-    if (!modeInd_.empty()) d.text(31, by, modeInd_, F::Tiny);
+    const int by = 18;
+    int x = 8;
+    auto indicator = [&](const std::string &value) {
+        d.text(x, by, value, F::Small);
+        x += d.textWidth(value, F::Small) + 12;
+    };
+    if (shift_) indicator("SHIFT");
+    if (alpha_) indicator("ALPHA");
+    if (storePending_) indicator("STO");
+    if (hyp_) indicator("HYP");
+    if (!modeInd_.empty()) indicator(modeInd_);
     const char *ang = set_.angle == calc::AngleMode::Degrees ? "D" : set_.angle == calc::AngleMode::Radians ? "R" : "G";
-    d.text(54, by, ang, F::Tiny);
-    if (set_.fmt == Settings::Fmt::Fix) d.text(61, by, "FIX", F::Tiny);
-    if (set_.fmt == Settings::Fmt::Sci) d.text(61, by, "SCI", F::Tiny);
-    if (set_.decimalComma) d.text(83, by, ",", F::Tiny);
-    if (set_.mathIO) d.text(77, by, "Math", F::Tiny);
-    if (engine_.recall('M')) d.text(90, by, "M", F::Tiny);
-    if (set_.showBatteryPlaceholder) d.text(103, by, "100%", F::Tiny);
+    indicator(ang);
+    if (set_.fmt == Settings::Fmt::Fix) indicator("FIX");
+    if (set_.fmt == Settings::Fmt::Sci) indicator("SCI");
+    if (set_.decimalComma) indicator(",");
+    if (set_.mathIO) indicator("Math");
+    if (engine_.recall('M')) indicator("M");
+    if (set_.showBatteryPlaceholder) indicator("100%");
     else {
         bool up = !hist_.empty() && (hidx_ == -1 || hidx_ > 0);
         bool dn = hidx_ >= 0;
-        if (up) d.glyph(97, 2, UP_ROWS, 3);
-        if (dn) d.glyph(104, 2, DN_ROWS, 3);
+        if (up) d.glyph(Display::width() - 24, 8, UP_ROWS, 3);
+        if (dn) d.glyph(Display::width() - 12, 8, DN_ROWS, 3);
     }
 }
 
 void Calculator::drawError(Display &d) {
     using F = Display::Font;
-    d.text(2, 20, err_, F::Main);
-    menuText(d, 2, 38, "[AC]  :Cancel");
-    d.text(2, 52, "[", F::Main); d.glyph(8, 47, TL, 5); d.text(12, 52, "][", F::Main); d.glyph(24, 47, TR, 5);
-    menuText(d, 28, 52, "]:Goto");
+    d.text(12, 88, err_, F::Main);
+    menuText(d, 12, 150, "[AC]  :Cancel");
+    d.text(12, 205, "[", F::Main); d.glyph(22, 200, TL, 5); d.text(30, 205, "][", F::Main); d.glyph(48, 200, TR, 5);
+    menuText(d, 56, 205, "]:Goto");
 }
 
 void Calculator::drawMenu(Display &d) {
     auto line = [&](int i, const char *a, const char *b = nullptr) {
-        int by = 19 + i * 12;
-        menuText(d, 2, by, a);
-        if (b) menuText(d, 66, by, b);
+        int by = 52 + i * 36;
+        menuText(d, 12, by, a);
+        if (b) menuText(d, Display::width() / 2 + 8, by, b);
     };
     switch (scr_) {
         case Screen::Mode:
-            line(0, "1:COMP", "2:CMPLX"); line(1, "3:STAT", "4:BASE-N"); line(2, "5:EQN", "6:MATRIX"); line(3, "7:TABLE", "8:VECTOR");
+            line(0, "1:COMP", "2:CMPLX"); line(1, "3:STAT", "4:BASE-N"); line(2, "5:EQN", "6:MATRIX"); line(3, "7:TABLE", "8:VECTOR"); line(4, "9:GRAPH");
             break;
         case Screen::Setup1:
             line(0, "1:MthIO 2:LineIO"); line(1, "3:Deg 4:Rad 5:Gra"); line(2, "6:Fix 7:Sci 8:Norm");
-            d.glyph(121, 55, DN_ROWS, 3);
+            d.glyph(Display::width() - 16, Display::height() - 14, DN_ROWS, 3);
             break;
         case Screen::Setup2:
             line(0, "1:ab/c  2:d/c"); line(1, "3:CMPLX 4:STAT"); line(2, "5:Disp  6:CONT"); line(3, "7:Battery");
-            d.glyph(121, 10, UP_ROWS, 3);
+            d.glyph(Display::width() - 16, 28, UP_ROWS, 3);
             break;
         case Screen::MathIOSel: line(0, "1:MathO"); line(1, "2:LineO"); break;
         case Screen::StatType: line(0, "1:1-Var"); line(1, "2:A+BX"); break;
@@ -806,8 +923,8 @@ void Calculator::drawMenu(Display &d) {
         case Screen::ContrastSel: {
             line(0, "Contrast");
             std::string value = std::to_string(set_.contrast);
-            d.text(56, 43, value, Display::Font::Main);
-            d.glyph(5, 49, TL, 5); d.glyph(118, 49, TR, 5);
+            d.text(Display::width() / 2, 130, value, Display::Font::Main);
+            d.glyph(16, 180, TL, 5); d.glyph(Display::width() - 24, 180, TR, 5);
             break;
         }
         case Screen::BatterySel:
@@ -821,15 +938,16 @@ void Calculator::drawMenu(Display &d) {
 
 void Calculator::drawModeWork(Display &d) {
     using F = Display::Font;
-    d.text(2, 17, modeInd_, F::Small);
+    const int left = 12;
+    d.text(left, 38, modeInd_, F::Main);
     std::string prompt;
     if (modeInd_ == "BASE") {
         const char *radix = set_.radix == calc::Radix::Binary ? "BIN" : set_.radix == calc::Radix::Octal ? "OCT"
                          : set_.radix == calc::Radix::Hexadecimal ? "HEX" : "DEC";
-        d.text(2, 29, radix, F::Tiny);
-        d.text(2, 45, modeHasResult_ ? (modeResults_.empty() ? "" : modeResults_[0])
+        d.text(left, 70, radix, F::Small);
+        d.text(left, 128, modeHasResult_ ? (modeResults_.empty() ? "" : modeResults_[0])
                                       : baseToken_.empty() ? "_" : baseToken_, F::Main);
-        d.text(2, 59, "AND OR XOR XNOR NOT", F::Tiny);
+        d.text(left, 212, "AND OR XOR XNOR NOT", F::Small);
         return;
     } else if (modeInd_ == "CMPLX") {
         static const char *fields[] = {"A real", "A imag", "B real", "B imag", "Select + - * /"};
@@ -853,27 +971,105 @@ void Calculator::drawModeWork(Display &d) {
         const char *function = modeOperation_ == 0 ? "X" : modeOperation_ == 1 ? "X^2" : modeOperation_ == 2 ? "sin(X)" : "cos(X)";
         prompt = std::string("f=") + function + " start/end/step";
     }
-    d.text(2, 29, prompt, F::Tiny);
+    d.text(left, 76, prompt, F::Small);
     if (!modeHasResult_) {
         std::string input = modeInput_.empty() ? "_" : modeInput_;
-        d.text(2, 45, input, F::Main);
-        d.text(2, 59, "Enter value: =", F::Tiny);
+        d.text(left, 132, input, F::Main);
+        d.text(left, 212, "Enter value: =", F::Small);
         return;
     }
     if (modeResults_.empty()) {
-        d.text(2, 45, "Select operation", F::Main);
-        d.text(2, 59, "+  -  *  /", F::Tiny);
+        d.text(left, 132, "Select operation", F::Main);
+        d.text(left, 212, "+  -  *  /", F::Small);
         return;
     }
     int lastPage = (int)modeResults_.size() - 1;
     modePage_ = std::clamp(modePage_, 0, std::max(0, lastPage));
     std::string shown = modeResults_[(size_t)modePage_];
     if (set_.decimalComma) std::replace(shown.begin(), shown.end(), '.', ',');
-    d.text(2, 45, shown, F::Main);
+    d.text(left, 132, shown, F::Main);
     if (modeResults_.size() > 1) {
-        d.text(2, 59, "Up/Down", F::Tiny);
-        d.text(80, 59, std::to_string(modePage_ + 1) + "/" + std::to_string(modeResults_.size()), F::Tiny);
-    } else d.text(2, 59, modeInd_ == "STAT" ? "=: next sample" : "AC: exit", F::Tiny);
+        d.text(left, 212, "Up/Down", F::Small);
+        d.text(Display::width() - 72, 212, std::to_string(modePage_ + 1) + "/" + std::to_string(modeResults_.size()), F::Small);
+    } else d.text(left, 212, modeInd_ == "STAT" ? "=: next sample" : "AC: exit", F::Small);
+}
+
+void Calculator::drawGraphEntry(Display &d, bool cursorOn) {
+    using F = Display::Font;
+    d.text(12, 48, "f(x) =", F::Main);
+    nat::Renderer renderer(d);
+    renderer.cursor = &ed_.cur;
+    renderer.dry = true;
+    renderer.draw(ed_.root, 64, 48);
+    renderer.dry = false;
+    renderer.curFound = false;
+    d.setClip(64, 36, Display::width() - 12, 132);
+    renderer.draw(ed_.root, 64, 84);
+    d.clearClip();
+    if (cursorOn && renderer.curFound)
+        d.vLine(renderer.curX, renderer.curTop, renderer.curBot - renderer.curTop + 1);
+    if (!graphError_.empty()) d.text(12, 164, graphError_, F::Small);
+    d.text(12, 212, "Enter: plot   DEL: edit   AC: exit", F::Small);
+}
+
+void Calculator::drawGraph(Display &d) {
+    using F = Display::Font;
+    const int left = GRAPH_X + GRAPH_INSET;
+    const int top = GRAPH_Y + GRAPH_INSET;
+    const int plotWidth = GRAPH_W - 2 * GRAPH_INSET - 1;
+    const int plotHeight = GRAPH_H - 2 * GRAPH_INSET - 1;
+    const int right = left + plotWidth;
+    const int bottom = top + plotHeight;
+    auto mapX = [&](double x) { return left + (int)std::lround((x - graphXMin_) / (graphXMax_ - graphXMin_) * plotWidth); };
+    auto mapY = [&](double y) { return bottom - (int)std::lround((y - graphYMin_) / (graphYMax_ - graphYMin_) * plotHeight); };
+    auto gridStep = [](double span) {
+        double raw = span / 10.0;
+        double power = std::pow(10.0, std::floor(std::log10(raw)));
+        double unit = raw / power;
+        return (unit <= 1.0 ? 1.0 : unit <= 2.0 ? 2.0 : unit <= 5.0 ? 5.0 : 10.0) * power;
+    };
+
+    d.text(12, 42, "GRAPH", F::Main);
+    d.text(82, 42, "f(x)=", F::Small);
+    d.text(112, 42, graphExpression_, F::Small);
+    d.frame(GRAPH_X, GRAPH_Y, GRAPH_W, GRAPH_H);
+
+    double xStep = gridStep(graphXMax_ - graphXMin_);
+    double yStep = gridStep(graphYMax_ - graphYMin_);
+    for (double x = std::ceil(graphXMin_ / xStep) * xStep; x <= graphXMax_; x += xStep) {
+        int px = mapX(x);
+        if (px < left || px > right) continue;
+        for (int py = top; py <= bottom; py += 4) d.pixel(px, py);
+    }
+    for (double y = std::ceil(graphYMin_ / yStep) * yStep; y <= graphYMax_; y += yStep) {
+        int py = mapY(y);
+        if (py < top || py > bottom) continue;
+        for (int px = left; px <= right; px += 4) d.pixel(px, py);
+    }
+    if (graphXMin_ <= 0.0 && graphXMax_ >= 0.0) d.vLine(mapX(0.0), top, plotHeight + 1);
+    if (graphYMin_ <= 0.0 && graphYMax_ >= 0.0) d.hLine(left, mapY(0.0), plotWidth + 1);
+
+    int previousX = -1, previousY = -1;
+    for (size_t i = 0; i < graphSamples_.size(); ++i) {
+        double y = graphSamples_[i];
+        if (!std::isfinite(y) || y < graphYMin_ || y > graphYMax_) { previousX = previousY = -1; continue; }
+        int px = left + (int)i;
+        int py = mapY(y);
+        if (previousX >= 0 && std::abs(py - previousY) < plotHeight * 2 / 3) d.line(previousX, previousY, px, py);
+        else d.pixel(px, py);
+        previousX = px; previousY = py;
+    }
+
+    if (!graphSamples_.empty()) {
+        graphTrace_ = std::clamp(graphTrace_, 0, static_cast<int>(graphSamples_.size()) - 1);
+        int traceX = left + graphTrace_;
+        for (int py = top; py <= bottom; py += 5) d.vLine(traceX, py, std::min(2, bottom - py + 1));
+        double x = graphXMin_ + (graphXMax_ - graphXMin_) * graphTrace_ / (graphSamples_.size() - 1);
+        double y = graphSamples_[static_cast<size_t>(graphTrace_)];
+        std::string readout = "x=" + modeNumber(x) + "  y=" + (std::isfinite(y) ? modeNumber(y) : "undefined");
+        d.text(12, 222, readout, F::Small);
+    }
+    d.text(12, 238, "Left/Right trace  Up/Down pan Y  +/- zoom  SHIFT+arrows pan X  = edit", F::Tiny);
 }
 
 void Calculator::drawCalc(Display &d, bool cursorOn) {
@@ -884,16 +1080,16 @@ void Calculator::drawCalc(Display &d, bool cursorOn) {
             rs = &res_; showRes = phase_ == Phase::Result; dec = showDec_; }
     const bool editing = phase_ == Phase::Edit && hidx_ < 0;
 
-    const int X0 = 3, VW = 121, TOP = 9;
+    const int X0 = 12, VW = Display::width() - 24, TOP = 48;
     nat::Box ib = r.measure(*src);
     int inBase = TOP + std::max(ib.asc, r.fontAsc(0));
 
     // result geometry first, so the input can be clipped above it
-    nat::Seq rseq; nat::Box rb; int resBase = 0, resTop = 64;
+    nat::Seq rseq; nat::Box rb; int resBase = 0, resTop = Display::height() - 12;
     if (showRes) {
         buildResult(rseq, *rs, dec);
         rb = r.measure(rseq);
-        resBase = 63 - rb.desc; resTop = resBase - rb.asc;
+        resBase = Display::height() - 16 - rb.desc; resTop = resBase - rb.asc;
     }
 
     // horizontal scroll so the cursor stays visible
@@ -913,12 +1109,12 @@ void Calculator::drawCalc(Display &d, bool cursorOn) {
     r.curFound = false;
     r.cursor = editing ? &ed_.cur : nullptr;
 
-    d.setClip(X0, 8, X0 + VW, std::max(9, showRes ? resTop - 1 : 64));
+    d.setClip(X0, 36, X0 + VW, std::max(37, showRes ? resTop - 12 : Display::height() - 12));
     r.draw(*src, X0 - scrollX_, inBase);
     d.clearClip();
-    int yc = TOP + 6;
-    if (scrollX_ > 0) r.arrowLeft(0, yc);
-    if (total - scrollX_ > VW) r.arrowRight(125, yc);
+    int yc = TOP + 16;
+    if (scrollX_ > 0) r.arrowLeft(4, yc);
+    if (total - scrollX_ > VW) r.arrowRight(Display::width() - 12, yc);
     if (editing && cursorOn && r.curFound) {
         d.vLine(std::max(0, r.curX), r.curTop, r.curBot - r.curTop + 1);
     }
@@ -926,16 +1122,16 @@ void Calculator::drawCalc(Display &d, bool cursorOn) {
     resMaxScroll_ = 0;
     if (showRes) {
         int rx;
-        if (rb.w <= VW + 2) rx = 126 - rb.w;
+        if (rb.w <= VW + 2) rx = Display::width() - 12 - rb.w;
         else {
             int maxScroll = rb.w - VW;
             resMaxScroll_ = maxScroll;
             resScroll_ = std::clamp(resScroll_, 0, maxScroll);
             rx = X0 - resScroll_;
-            if (resScroll_ > 0) r.arrowLeft(0, resBase - 3);
-            if (resScroll_ < maxScroll) r.arrowRight(125, resBase - 3);
+            if (resScroll_ > 0) r.arrowLeft(4, resBase - 3);
+            if (resScroll_ < maxScroll) r.arrowRight(Display::width() - 12, resBase - 3);
         }
-        d.setClip(0, 8, 128, 64);
+        d.setClip(0, 36, Display::width(), Display::height());
         r.cursor = nullptr;
         r.draw(rseq, rx, resBase);
         d.clearClip();
@@ -946,7 +1142,9 @@ void Calculator::draw(Display &d, bool cursorOn) {
     d.setContrast(set_.contrast);
     d.clear();
     drawIndicators(d);
-    if (scr_ == Screen::ModeWork) drawModeWork(d);
+    if (scr_ == Screen::GraphEntry) drawGraphEntry(d, cursorOn);
+    else if (scr_ == Screen::GraphPlot) drawGraph(d);
+    else if (scr_ == Screen::ModeWork) drawModeWork(d);
     else if (scr_ != Screen::Calc) drawMenu(d);
     else if (phase_ == Phase::Error) drawError(d);
     else drawCalc(d, cursorOn);

@@ -16,14 +16,15 @@ This page distinguishes **desktop simulator keys**, **calculator SHIFT/ALPHA seq
 | `Delete` | AC |
 | Arrow keys | Cursor, history, result paging, menu navigation |
 | `Tab` | S<=>D |
-| **Left Shift** | Toggle calculator SHIFT state; displays `S` |
-| `x` | Toggle ALPHA state; displays `A` |
+| **Left Shift** | Toggle calculator SHIFT state; displays `SHIFT` |
+| `x` | Toggle ALPHA state; displays `ALPHA` |
 | `y` | Toggle HYP state; displays `HYP` |
 | `a` | Ans; Left Shift then `a` starts STO |
 | `s`, `c`, `t` | sin, cos, tan; with calculator SHIFT: asin, acos, atan; with HYP: sinh, cosh, tanh |
 | `f`, `r`, `q`, `h`, `v`, `l`, `n`, `e` | Fraction, sqrt, square, power, reciprocal, log, ln, x10^x; SHIFT selects the secondary function described below |
 | `p` | Pi constant |
 | `m` | MODE; calculator SHIFT then `m` opens SETUP |
+| MODE `9` | Graph mode; enter an expression using `X`, then Enter to plot |
 | `u` | SETUP shortcut |
 | `j`, `k` | Permutation `P`, combination `C` |
 | `%` | Postfix percentage |
@@ -56,7 +57,14 @@ ALPHA followed by those same digits recalls the corresponding variable. Untouche
 | MODE 6 MATRIX | 2x2 determinant, inverse, addition, multiplication |
 | MODE 7 TABLE | x, x^2, sin(x), cos(x); up to 21 rows |
 | MODE 8 VECTOR | 3D dot/cross products, magnitudes, angle |
+| MODE 9 GRAPH | Plot one expression; trace with Left/Right, pan Y with Up/Down, zoom with `+`/`-`, and press `=` to edit |
 | Left Shift+MODE | SETUP |
+
+In graph mode, use `SHIFT` then Left/Right to pan the X range. The initial graph
+uses fixed `x=[-10,10]` and `y=[-5,5]` ranges; `+` zooms in and `-` zooms out
+around the current center. Graphing currently supports one real-valued function
+and a movable trace; multiple functions, editable ranges, and table view are
+not implemented yet. Example scripted entry: `mode 9 sin X ) =`.
 
 SETUP includes MathI/LineI, DEG/RAD/GRA, FIX/SCI/NORM, fraction style, complex result format, statistics frequency, decimal separator, contrast, and an optional `100%` battery placeholder. Battery percentage is only a placeholder, not a hardware reading.
 

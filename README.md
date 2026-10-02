@@ -1,13 +1,17 @@
 # casio_ui_sim
 
-fx-570ES PLUS-style **LCD simulator** for the ESP32-S3 calculator project.
-No calculator body/keypad graphics here on purpose (see chat) -- just the
-128x64 glass, driven by real U8g2, reproducing the display features the
-570ES PLUS actually has: stacked fractions (incl. mixed a b/c), radicals
-with a proper index and overbar, nested exponents, |abs| bars, log with a
-subscript base, the pi glyph, x10^n scientific notation, S<=>D (exact <->
-decimal) toggle, MODE/SETUP menus, calculation history (up/down), and the
-Math ERROR screen with [AC]/[<|][|>] recovery.
+C++/SDL2 desktop simulator for the ESP32-S3 graphing calculator project. The
+virtual display now uses the target TFT's 320x240 landscape logical resolution.
+The existing scientific calculator, natural-expression editor, menus, result
+display, and cursor are the starting point for a graph-first interface. MODE 9
+already supports one entered function, evaluator-backed sampling, axes/grid,
+plotting, trace readout, basic pan, and zoom. This is still an early UI
+simulator: the virtual framebuffer is monochrome; multiple functions, editable
+graph ranges, text, Wi-Fi, AI, and ESP32 hardware workflows are not implemented
+yet.
+
+See [PROJECT.md](PROJECT.md) for the current product direction, architecture
+boundary, and implementation order.
 
 ## Architecture
 
@@ -19,18 +23,16 @@ Math ERROR screen with [AC]/[<|][|>] recovery.
                     fractions/roots/powers as real nested nodes, not strings)
     natural_draw.*  lays out & draws that tree with U8g2 primitives only
     compact_font.h  standalone 364-byte 5x7 uppercase/lowercase alphabet table
-    calculator.*    fx-570ES PLUS behaviour: keys, screens, indicators,
+    calculator.*    inherited scientific-calculator behavior: keys, screens, indicators,
                     MODE/SETUP workflows, history, S<=>D, Fix/Sci/Norm
     display.*       thin wrapper over real U8g2 (fonts, lines, boxes, clip)
-    lcd_hal.*       simulated "controller driver" (stands in for
-                    u8x8_d_st7565_*; not an SPI-protocol emulation)
-    main.cpp        SDL2 window that paints the 128x64 glass, or a
+    lcd_hal.*       simulated U8g2 virtual framebuffer (not a TFT/SPI emulation)
+    main.cpp        SDL2 window that paints the 320x240 display, or a
                     scripted/headless mode for testing (see below)
 
-Firmware swaps one line in `Display::Display()`:
-`u8g2_Setup_calcsim_128x64_f(...)` -> `u8g2_Setup_st7565_ea_dogm128_f(...)`.
-Everything else -- fonts, natural-display layout, calculator logic -- is
-unchanged.
+The simulator currently uses U8g2's 1-bit raster API. Firmware will provide a
+TFT-compatible display backend behind the same UI-facing drawing boundary; the
+ST7789 color driver and color rendering are not implemented yet.
 
 ## Build
 

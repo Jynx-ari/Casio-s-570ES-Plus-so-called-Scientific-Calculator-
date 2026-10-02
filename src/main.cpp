@@ -2,7 +2,7 @@
 //
 //   casio_ui_sim                        interactive window (keyboard)
 //   casio_ui_sim --keys "1 frac 2 = @out.bmp"   scripted run, no window needed
-//   options: --scale N  --ascii  (dump the 128x64 glass as text after the script)
+//   options: --scale N  --ascii  (dump the 320x240 display as text after the script)
 #include <SDL2/SDL.h>
 
 #include <cstdio>
@@ -121,7 +121,7 @@ const char *HELP =
     "  f fraction   r sqrt   q x^2   ^ power   v x^-1   l log   n ln   s/c/t sin/cos/tan\n"
     "  i imaginary   F10 floor   F11 ceil   F12 arg\n"
     "  j nPr   k nCr   % percent   , comma   g/i/o asinh/acosh/atanh\n"
-    "  b abs   e x10^x   a Ans (Shift+a STO)   p pi   m MODE   u SETUP   Tab S<=>D   Shift   x ALPHA\n"
+    "  b abs   e x10^x   a Ans (Shift+a STO)   p pi   m MODE (9 GRAPH)   u SETUP   Tab S<=>D   Shift   x ALPHA\n"
     "  BASE-N: F1-F5 logic   Memory: F6 M+ (Shift+F6 M-)   F8 MR (Shift+F8 MC)\n"
     "  GCD/LCM: [ and ] keys\n"
     "  Shift+Ans stores answer (then press variable number)\n";
@@ -129,7 +129,7 @@ const char *HELP =
 } // namespace
 
 int main(int argc, char **argv) {
-    std::string keys, shotPath; int scale = 5; bool ascii = false, scripted = false;
+    std::string keys, shotPath; int scale = 3; bool ascii = false, scripted = false;
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "--keys" && i + 1 < argc) { keys = argv[++i]; scripted = true; }
@@ -149,7 +149,7 @@ int main(int argc, char **argv) {
 
     if (SDL_Init(SDL_INIT_VIDEO) != 0) { std::cerr << "SDL_Init: " << SDL_GetError() << "\n"; return 1; }
     const int margin = 16;
-    SDL_Window *win = SDL_CreateWindow("fx-570ES PLUS display sim (U8g2 128x64)", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+    SDL_Window *win = SDL_CreateWindow("Scientific Calculator Simulator (320x240)", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                        Display::width() * scale + 2 * margin, Display::height() * scale + 2 * margin, SDL_WINDOW_SHOWN);
     if (!win) { std::cerr << "window: " << SDL_GetError() << "\n"; return 1; }
     std::cout << HELP;

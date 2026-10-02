@@ -19,12 +19,12 @@ static const u8x8_display_info_t calcsim_info = {
   /* i2c_bus_clock_100kHz = */ 0,
   /* data_setup_time_ns = */ 0,
   /* write_pulse_width_ns = */ 0,
-  /* tile_width = */ 16,
-  /* tile_hight = */ 8,
+  /* tile_width = */ CALCSIM_LCD_W / 8,
+  /* tile_hight = */ CALCSIM_LCD_H / 8,
   /* default_x_offset = */ 0,
   /* flipmode_x_offset = */ 0,
-  /* pixel_width = */ 128,
-  /* pixel_height = */ 64
+  /* pixel_width = */ CALCSIM_LCD_W,
+  /* pixel_height = */ CALCSIM_LCD_H
 };
 
 /* Unpack one 8-pixel-tall column strip (LSB = top) into the glass buffer. */
@@ -44,7 +44,7 @@ static uint8_t calcsim_gpio_and_delay(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int
   return 1;
 }
 
-static uint8_t u8x8_d_calcsim_128x64(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *arg_ptr)
+static uint8_t u8x8_d_calcsim_320x240(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *arg_ptr)
 {
   switch (msg) {
     case U8X8_MSG_DISPLAY_SETUP_MEMORY:
@@ -82,13 +82,13 @@ static uint8_t u8x8_d_calcsim_128x64(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int,
   return 1;
 }
 
-void u8g2_Setup_calcsim_128x64_f(u8g2_t *u8g2, const u8g2_cb_t *rotation)
+void u8g2_Setup_calcsim_320x240_f(u8g2_t *u8g2, const u8g2_cb_t *rotation)
 {
-  static uint8_t buf[128 * 8];   /* 128 columns x 8 pages, full frame */
+  static uint8_t buf[CALCSIM_LCD_W * CALCSIM_LCD_H / 8];
   u8x8_t *u8x8 = u8g2_GetU8x8(u8g2);
   u8x8_SetupDefaults(u8x8);
-  u8x8->display_cb = u8x8_d_calcsim_128x64;
+  u8x8->display_cb = u8x8_d_calcsim_320x240;
   u8x8->gpio_and_delay_cb = calcsim_gpio_and_delay;
   u8x8_SetupMemory(u8x8);
-  u8g2_SetupBuffer(u8g2, buf, 8, u8g2_ll_hvline_vertical_top_lsb, rotation);
+  u8g2_SetupBuffer(u8g2, buf, CALCSIM_LCD_H / 8, u8g2_ll_hvline_vertical_top_lsb, rotation);
 }

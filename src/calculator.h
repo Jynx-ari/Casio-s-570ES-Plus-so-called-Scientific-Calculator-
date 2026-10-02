@@ -43,7 +43,8 @@ public:
 
 private:
     enum class Screen { Calc, Mode, Setup1, Setup2, MathIOSel, NormSel, BaseNSel,
-                        ComplexSel, StatSel, DispSel, ContrastSel, BatterySel, StatType, MatrixOp, TableFn, ModeWork, Prompt } scr_ = Screen::Calc;
+                        ComplexSel, StatSel, DispSel, ContrastSel, BatterySel, StatType, MatrixOp, TableFn, ModeWork,
+                        GraphEntry, GraphPlot, Prompt } scr_ = Screen::Calc;
     enum class Phase { Edit, Result, Error } phase_ = Phase::Edit;
     struct Hist { nat::Seq expr; calc::EvalResult res; };
 
@@ -75,11 +76,21 @@ private:
     std::string baseToken_;
     int baseOperation_ = -1;
     bool baseHasFirst_ = false;
+    std::string graphExpression_;
+    std::string graphError_;
+    std::vector<double> graphSamples_;
+    double graphXMin_ = -10.0, graphXMax_ = 10.0;
+    double graphYMin_ = -5.0, graphYMax_ = 5.0;
+    int graphTrace_ = 0;
+    int graphValidSamples_ = 0;
 
     void editKey(Key k, bool sh, bool al, bool hyp);
     void menuKey(Key k);
     void modeKey(Key k);
     void finishModeEntry();
+    void graphKey(Key k);
+    bool graphValueAt(double x, double &y) const;
+    void rebuildGraphSamples();
     void showMemoryFeedback(const std::string &suffix);
     void equals();
     void newInputIfResult(Key k);
@@ -90,6 +101,8 @@ private:
     void drawError(Display &d);
     void drawMenu(Display &d);
     void drawModeWork(Display &d);
+    void drawGraphEntry(Display &d, bool cursorOn);
+    void drawGraph(Display &d);
     void buildResult(nat::Seq &out, const calc::EvalResult &r, bool decimal) const;
 };
 
